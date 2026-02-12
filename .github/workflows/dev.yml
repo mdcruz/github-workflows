@@ -1,0 +1,68 @@
+name: CI / Dev Deploy
+
+on:
+  # Run CI when a PR targets main
+  pull_request:
+    branches: [ main ]
+  # Run CI and (on pushes to main) a dev deploy
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: write    # needed if we push tags
+  id-token: write
+  # adjust other permissions as needed
+
+jobs:
+  ci:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node (example)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install & Test
+        run: |
+          npm ci
+          npm test
+
+  deploy-dev:
+    name: Deploy to Dev (and create dev tag)
+    runs-on: ubuntu-latest
+    needs: ci
+    # only run the deploy job when this is a push to main (i.e. not for PRs)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: dev   # optional: set environment for deployment (protect it if you like)
+    steps:
+      - name: Checkout (full)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Deploy to Dev (placeholder)
+        run: |
+          echo "Run your dev deployment commands here (kubectl/terraform/whatever)"
+          # Example: ./scripts/deploy-dev.sh
+
+      - name: Create dev-deployed tag
+        id: tag
+        run: |
+          sha=${GITHUB_SHA::8}
+          tag="dev-deployed-${sha}"
+          echo "Tag to create: $tag"
+          # configure git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$tag" -m "Dev deployed: $GITHUB_SHA"
+          git push origin "$tag"
+          echo "created_tag=$tag" >> $GITHUB_OUTPUT
+
+      - name: Output created tag
+        run: echo "Dev created tag ${{ steps.tag.outputs.created_tag }}"
