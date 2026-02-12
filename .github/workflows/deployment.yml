@@ -42,54 +42,9 @@ jobs:
           git tag -a "$tag" -m "Dev deployed: $GITHUB_SHA" || true
           echo "dev_tag=$tag" >> $GITHUB_OUTPUT
 
-  resolve-dev-tag:
-    name: Resolve dev tag (manual path)
-    runs-on: ubuntu-latest
-    # only run on manual dispatch
-    if: github.event_name == 'workflow_dispatch'
-    outputs:
-      resolved_dev_tag: ${{ steps.resolve.outputs.resolved_tag }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Resolve tag (use input or fallback)
-        id: resolve
-        run: |
-          # Use supplied dev_tag when provided
-          if [ -n "${{ github.event.inputs.dev_tag }}" ]; then
-            echo "Using provided dev_tag: ${{ github.event.inputs.dev_tag }}"
-            echo "::set-output name=resolved_tag::${{ github.event.inputs.dev_tag }}"
-            exit 0
-          fi
-
-          # If the workflow run also included a push (rare when manually running),
-          # you could read the deploy-dev output, otherwise fall back to a commit-based name:
-          # NOTE: outputs from previous jobs are only available if that job ran in this run.
-          if [ -n "${{ needs.deploy-dev.outputs.dev_tag }}" ]; then
-            echo "Using dev tag from deploy-dev job output: ${{ needs.deploy-dev.outputs.dev_tag }}"
-            echo "::set-output name=resolved_tag::${{ needs.deploy-dev.outputs.dev_tag }}"
-            exit 0
-          fi
-
-          # Final fallback: create a short-sha based tag name (no remote tag required)
-          short_sha=${GITHUB_SHA::8}
-          fallback="dev-deployed-${short_sha}"
-          echo "No tag supplied and no deploy-dev output — using fallback: $fallback"
-          echo "::set-output name=resolved_tag::$fallback"
-
-      - name: Confirm intent
-        run: |
-          if [ "${{ github.event.inputs.confirm }}" != "YES" ]; then
-            echo "Aborting: confirm input not YES."
-            exit 1
-          fi
-
   deploy-prod:
     name: Prod deploy (environment gated)
     runs-on: ubuntu-latest
-    needs: resolve-dev-tag
     # only run on manual dispatch
     if: github.event_name == 'workflow_dispatch'
     environment: production
