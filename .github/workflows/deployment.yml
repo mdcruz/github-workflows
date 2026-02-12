@@ -6,38 +6,15 @@ on:
   push:
     branches: [ main ]
   workflow_dispatch:
-    inputs:
-      dev_tag:
-        description: 'Optional: dev tag (e.g. dev-deployed-abc123). Leave blank to use commit-sha.'
-        required: false
-      confirm:
-        description: 'Type YES to confirm prod deploy'
-        required: true
-        default: 'NO'
 
 permissions:
   contents: read
 
 jobs:
-  ci:
-    name: CI (quick)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Quick sanity
-        run: |
-          echo "CI passed — nothing heavy here."
-
   deploy-dev:
     name: Dev deploy (simple)
     runs-on: ubuntu-latest
-    needs: ci
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    outputs:
-      dev_tag: ${{ steps.make_tag.outputs.dev_tag }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -55,45 +32,10 @@ jobs:
           git tag -a "$tag" -m "Dev deployed: $GITHUB_SHA" || true
           echo "dev_tag=$tag" >> $GITHUB_OUTPUT
 
-  # Manual prod path: resolve a tag (from input or use deploy-dev output if this run included a push)
-  resolve-dev-tag:
-    name: Resolve dev tag (manual)
-    runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch'
-    outputs:
-      resolved_dev_tag: ${{ steps.set_tag.outputs.resolved_tag }}
-    steps:
-      - name: Checkout (for context)
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Resolve tag (use input or fallback to commit sha)
-        id: set_tag
-        run: |
-          if [ -n "${{ github.event.inputs.dev_tag }}" ]; then
-            echo "Using provided dev_tag: ${{ github.event.inputs.dev_tag }}"
-            echo "::set-output name=resolved_tag::${{ github.event.inputs.dev_tag }}"
-            exit 0
-          fi
-
-          # Fall back to a short commit-based tag name (no remote tag required)
-          short_sha=${GITHUB_SHA::8}
-          fallback="dev-deployed-${short_sha}"
-          echo "No tag supplied — using fallback: $fallback"
-          echo "::set-output name=resolved_tag::$fallback"
-
-      - name: Confirm intent
-        run: |
-          if [ "${{ github.event.inputs.confirm }}" != "YES" ]; then
-            echo "Aborting: confirm input not YES."
-            exit 1
-          fi
-
   deploy-prod:
     name: Prod deploy (environment gated)
     runs-on: ubuntu-latest
-    needs: resolve-dev-tag
+    needs: deploy-dev
     if: github.event_name == 'workflow_dispatch'
     environment: production
     steps:
